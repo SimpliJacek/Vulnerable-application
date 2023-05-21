@@ -40,10 +40,10 @@ class DBManager:
         return rec
 
     def check_login(self, login, psw):
-        query = "select name from users where (name='" + login + "' and password='" + psw + "');"     ### ' or 1=1)#
-        self.cursor.execute(query)
-        # query = "select name from users where ( name = %s and password = %s );" # prepared Statement
-        # self.cursor.execute(query, (login, psw))
+        # query = "select name from users where (name='" + login + "' and password='" + psw + "');"     ### ' or 1=1)#
+        # self.cursor.execute(query)
+        query = "select name from users where ( name = %s and password = %s );" # prepared Statement
+        self.cursor.execute(query, (login, psw))
         rec = []
         for c in self.cursor:
             rec.append(c[0])
