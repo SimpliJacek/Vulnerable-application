@@ -2,19 +2,42 @@ import os
 from flask import Flask, request, render_template
 import mysql.connector
 import sys
+import sqlalchemy as db
+
+
 
 class DBManager:
     def __init__(self, database='example', host="db", user="root", password_file=None):
         pf = open(password_file, 'r')
+        pw = pf.read()
         self.connection = mysql.connector.connect(
-            user=user, 
-            password=pf.read(),
+            user=user,
+            password=pw,
             host=host, # name of the mysql service as set in the docker compose file
             database=database,
             auth_plugin='mysql_native_password'
         )
+        db_connection = db.create_engine('mysql+mysqlconnector://'+user+':'+pw+'@'+host+':3306/' + database, connect_args={'auth_plugin': 'mysql_native_password'})
+        global c
+        c = db_connection.connect()
+        metadata_obj = db.MetaData()
         pf.close()
         self.cursor = self.connection.cursor()
+        global passwd
+        self.cursor.execute('DROP TABLE IF EXISTS users')
+        passwd = db.Table('users', metadata_obj,                                    
+            db.Column('id', db.Integer, primary_key=True),  
+            db.Column('name', db.String(15)),                    
+            db.Column('password', db.String(15))        
+        )
+        metadata_obj.create_all(db_connection)
+        stmt = db.insert(passwd).values(id='1',name='admin',password='password')
+        stmt.compile()
+        c.execute(stmt)
+        c.commit()
+
+        
+        
     
     def populate_db(self):
         self.cursor.execute('DROP TABLE IF EXISTS users')
@@ -40,10 +63,13 @@ class DBManager:
         return rec
 
     def check_login(self, login, psw):
+        global c
         # query = "select name from users where (name='" + login + "' and password='" + psw + "');"     ### ' or 1=1)#
         # self.cursor.execute(query)
-        query = "select name from users where ( name = %s and password = %s );" # prepared Statement
-        self.cursor.execute(query, (login, psw))
+        # query = "select name from users where ( name = %s and password = %s );" # prepared Statement
+        # self.cursor.execute(query, (login, psw))
+        query = db.select(passwd).where((passwd.c.name == login) & (passwd.c.password == psw))
+        return c.execute(query)
         rec = []
         for c in self.cursor:
             rec.append(c[0])
@@ -54,6 +80,9 @@ class DBManager:
 
 server = Flask(__name__)
 conn = None
+db_connection = None
+metadata_obj = None
+global c
 
 @server.route('/login')
 def my_form():
@@ -64,14 +93,15 @@ def my_form_post():
     global conn
     if not conn:
         conn = DBManager(password_file='/run/secrets/db-password')
-        conn.populate_db()
+        # conn.populate_db()
 
     login = request.form['login']
     psw = request.form['password']
     result = conn.check_login(login,psw)
     print(result, file=sys.stdout)
-    if len(result) > 0:
-        return "zalogowano jako " + str(result[0])
+    rezultat = result.first()
+    if rezultat is not None:
+        return "zalogowano jako " + str(rezultat[1])
     else:
         return "nie mozna zalogowac"
 
